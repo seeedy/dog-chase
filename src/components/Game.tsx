@@ -1,11 +1,16 @@
 import React, { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
+import { DogCharacter } from './DogCharacter';
+import { GameUI } from './GameUI';
 
 const Game = () => {
   const gameRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const isInitializedRef = useRef(false);
   const gameLoopRef = useRef<() => void | undefined>(() => {});
+  const dogRef = useRef<DogCharacter | null>(null);
+  const gameUIRef = useRef<GameUI | null>(null);
+  const lastTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!gameRef.current) return;
@@ -15,12 +20,12 @@ const Game = () => {
     // Handle keyboard input
     const keys: { [key: string]: boolean } = {};
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) {
         keys[e.key] = true;
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) {
         keys[e.key] = false;
       }
     };
@@ -93,19 +98,8 @@ const Game = () => {
           background.tileScale.set(0.5); // Adjust scale as needed
           gameContainer.addChildAt(background, 0); // Add at bottom of container
 
-          // Create score display
-          const scoreText = new PIXI.Text({
-              text: 'Score: 0',
-              style: {
-                  fontFamily: 'Arial',
-                  fontSize: 24,
-                  fill: 0x000000,
-                  align: 'right'
-              }
-          });
-          scoreText.x = app.screen.width - 150;
-          scoreText.y = 20;
-          app.stage.addChild(scoreText);
+          // Create game UI
+          gameUIRef.current = new GameUI({ app });
 
           // Initialize game variables
           let frameCount = 0;
@@ -113,7 +107,6 @@ const Game = () => {
           let treatTimer = 0;
           let treatVisible = false;
           let treat: PIXI.Sprite | null = null;
-          let score = 0;
           let nextTreatDelay = 5; // Initial delay of 5 seconds
           let chuckTimer = 0;
           let chuck: PIXI.AnimatedSprite | null = null;
@@ -121,22 +114,24 @@ const Game = () => {
           const CHUCK_SPEED = 9;
           const CHUCK_SPAWN_INTERVAL = 10;
           
+          // Create dog character
+          dogRef.current = new DogCharacter({
+            app,
+            gameContainer,
+            texture: dogTexture
+          });
+          
           // Function to get random delay between treats
           const getNextTreatDelay = () => {
               return Math.random() * 7 + 5; // Random number between 5 and 12
           };
 
-          // Function to update score
-          const updateScore = (points: number) => {
-              score += points;
-              scoreText.text = `Score: ${score}`;
-          };
-
           // Function to check collision between dog and treat
           const checkCollision = () => {
-              if (!treat || !dog) return false;
+              if (!treat || !dogRef.current) return false;
 
-              const dogBounds = dog.getBounds();
+              const dogBounds = dogRef.current.getBounds();
+              if (!dogBounds) return false;
               const treatBounds = treat.getBounds();
 
               const dogCenterX = dogBounds.x + dogBounds.width / 2;
@@ -229,35 +224,20 @@ const Game = () => {
               chuckHurtSpritesheet.textures.hurt2
           ];
 
-          // Create game over text
-          const gameOverText = new PIXI.Text({
-              text: 'Game Over',
-              style: {
-                  fontFamily: 'Arial',
-                  fontSize: 48,
-                  fill: 0xFF0000,
-                  align: 'center'
-              }
-          });
-          gameOverText.anchor.set(0.5);
-          gameOverText.x = app.screen.width / 2;
-          gameOverText.y = 50;
-          gameOverText.visible = false;
-          app.stage.addChild(gameOverText);
-
           let isGameOver = false;
 
           // Function to handle game over
           const handleGameOver = () => {
               isGameOver = true;
-              gameOverText.visible = true;
-              score = 0;
-              scoreText.text = 'Score: 0';
+              if (gameUIRef.current) {
+                gameUIRef.current.showGameOver();
+                gameUIRef.current.resetScore();
+              }
               
               // Remove dog
-              if (dog) {
-                  gameContainer.removeChild(dog);
-                  dog = null;
+              if (dogRef.current) {
+                  dogRef.current.destroy();
+                  dogRef.current = null;
               }
 
               // Show hurt animation for Chuck
@@ -285,9 +265,10 @@ const Game = () => {
 
           // Function to check collision between dog and Chuck
           const checkChuckCollision = () => {
-              if (!chuck || !dog) return false;
+              if (!chuck || !dogRef.current) return false;
 
-              const dogBounds = dog.getBounds();
+              const dogBounds = dogRef.current.getBounds();
+              if (!dogBounds) return false;
               const chuckBounds = chuck.getBounds();
 
               return dogBounds.x < chuckBounds.x + chuckBounds.width &&
@@ -309,7 +290,7 @@ const Game = () => {
               chuck.scale.set(2);
 
               // Determine spawn position and direction based on player position
-              const spawnFromRight = currentX < app.screen.width / 2;
+              const spawnFromRight = dogRef.current?.getBounds()?.x || 0 < app.screen.width / 2;
               chuck.x = spawnFromRight ? app.screen.width + 20 : -20;
               chuck.y = Math.random() * (app.screen.height - 100) + 50; // Random Y position
               chuckDirection = spawnFromRight ? 'left' : 'right';
@@ -320,62 +301,8 @@ const Game = () => {
               gameContainer.addChild(chuck);
           };
 
-          // Create dog sprite sheet
-          const frameWidth = 60;
-          const frameHeight = 39;
-          
-          const spritesheet = new PIXI.Spritesheet(dogTexture.source, {
-              frames: {
-                  run0: { frame: { x: 0, y: frameHeight * 2, w: frameWidth, h: frameHeight } },
-                  run1: { frame: { x: frameWidth, y: frameHeight * 2, w: frameWidth, h: frameHeight } },
-                  run2: { frame: { x: frameWidth * 2, y: frameHeight * 2, w: frameWidth, h: frameHeight } },
-                  run3: { frame: { x: frameWidth * 3, y: frameHeight * 2, w: frameWidth, h: frameHeight } },
-                  run4: { frame: { x: frameWidth * 4, y: frameHeight * 2, w: frameWidth, h: frameHeight } },
-                  idleSit0: { frame: { x: 0, y: frameHeight * 4, w: frameWidth, h: frameHeight } },
-                  idleSit1: { frame: { x: frameWidth, y: frameHeight * 4, w: frameWidth, h: frameHeight } },
-                  idleSit2: { frame: { x: frameWidth * 2, y: frameHeight * 4, w: frameWidth, h: frameHeight } },
-                  idleSit3: { frame: { x: frameWidth * 3, y: frameHeight * 4, w: frameWidth, h: frameHeight } }
-              },
-              meta: {
-                  scale: "1"
-              }
-          });
-
-          await spritesheet.parse();
-
-          // Create arrays of textures for animations
-          const runTextures = [
-              spritesheet.textures.run0,
-              spritesheet.textures.run1,
-              spritesheet.textures.run2,
-              spritesheet.textures.run3,
-              spritesheet.textures.run4
-          ];
-
-          const idleTextures = [
-              spritesheet.textures.idleSit0,
-              spritesheet.textures.idleSit1,
-              spritesheet.textures.idleSit2,
-              spritesheet.textures.idleSit3
-          ];
-
-          // Create animated sprite
-          let dog: PIXI.AnimatedSprite | null = new PIXI.AnimatedSprite(runTextures);
-          dog.animationSpeed = 0.25;
-          dog.play();
-          dog.anchor.set(0.5);
-          dog.x = app.screen.width / 2;
-          dog.y = app.screen.height / 2;
-          dog.scale.set(2);
-          gameContainer.addChild(dog);
-
-          let currentX = app.screen.width / 2;
-          let currentY = app.screen.height / 2;
-          let currentAnimation = 'run';
-          let lastDirection = 1; // 1 for right, -1 for left
-          
           // Game loop
-          const gameLoop = () => {
+          const gameLoop = (currentTime: number) => {
               frameCount++;
 
               if (isGameOver) {
@@ -383,8 +310,21 @@ const Game = () => {
                   return;
               }
 
+              // Calculate delta time
+              const deltaTime = (currentTime - lastTimeRef.current) / 1000;
+              lastTimeRef.current = currentTime;
+
+              // Update dog character
+              if (dogRef.current) {
+                  dogRef.current.update(keys, deltaTime);
+                  // Update stamina bar
+                  if (gameUIRef.current) {
+                      gameUIRef.current.updateStamina(dogRef.current.getStamina());
+                  }
+              }
+
               // Handle treat spawning and collision
-              treatTimer += 1/60;
+              treatTimer += deltaTime;
               if (treatTimer >= nextTreatDelay && !treatVisible) {
                   createTreat();
                   treatTimer = 0;
@@ -392,7 +332,7 @@ const Game = () => {
               }
 
               // Handle chuck spawning and movement
-              chuckTimer += 1/60;
+              chuckTimer += deltaTime;
               if (chuckTimer >= CHUCK_SPAWN_INTERVAL) {
                   spawnChuck();
                   chuckTimer = 0;
@@ -429,7 +369,9 @@ const Game = () => {
                       }
                       treatVisible = false;
                       treatTimer = 0;
-                      updateScore(1);
+                      if (gameUIRef.current) {
+                        gameUIRef.current.updateScore(1);
+                      }
                   } else if (treatTimer >= 3) {
                       if (treat) {
                           gameContainer.removeChild(treat);
@@ -440,79 +382,12 @@ const Game = () => {
                   }
               }
 
-              const speed = 5;
-              let moved = false;
-              let isMoving = false;
-              
-              if (keys['ArrowLeft']) {
-                currentX -= speed;
-                moved = true;
-                isMoving = true;
-                lastDirection = 1; // Store direction for idle
-                dog.scale.set(2, 2);
-              }
-              if (keys['ArrowRight']) {
-                currentX += speed;
-                moved = true;
-                isMoving = true;
-                lastDirection = -1; // Store direction for idle
-                dog.scale.set(-2, 2);
-              }
-              if (keys['ArrowUp']) {
-                currentY -= speed;
-                moved = true;
-                isMoving = true;
-              }
-              if (keys['ArrowDown']) {
-                currentY += speed;
-                moved = true;
-                isMoving = true;
-              }
-
-              if (moved) {
-                // Update positions
-                dog.x = currentX;
-                dog.y = currentY;
-                
-                // Force a render update
-                app.stage.updateTransform(app.stage);
-                app.render();
-              }
-
-              // Switch animations based on movement state
-              if (isMoving && currentAnimation !== 'run') {
-                currentAnimation = 'run';
-                gameContainer.removeChild(dog);
-                dog = new PIXI.AnimatedSprite(runTextures);
-                dog.animationSpeed = 0.2;
-                dog.play();
-                dog.anchor.set(0.5);
-                dog.scale.set(lastDirection * 2, 2); // Use last direction
-                dog.x = currentX;
-                dog.y = currentY;
-                gameContainer.addChild(dog);
-              } else if (!isMoving && currentAnimation !== 'idle') {
-                currentAnimation = 'idle';
-                gameContainer.removeChild(dog);
-                dog = new PIXI.AnimatedSprite(idleTextures);
-                dog.animationSpeed = 0.1;
-                dog.play();
-                dog.anchor.set(0.5);
-                dog.scale.set(lastDirection * 2, 2); // Use last direction
-                dog.x = currentX;
-                dog.y = currentY;
-                gameContainer.addChild(dog);
-              }
-
-              // Keep the dog within the screen bounds
-              currentX = Math.max(dog.width / 2, Math.min(app.screen.width - dog.width / 2, currentX));
-              currentY = Math.max(dog.height / 2, Math.min(app.screen.height - dog.height / 2, currentY));
-
               // Request next frame
               animationFrameId = requestAnimationFrame(gameLoop);
           };
 
           // Start the game loop
+          lastTimeRef.current = performance.now();
           animationFrameId = requestAnimationFrame(gameLoop);
 
           // Store the animation frame ID for cleanup
@@ -535,14 +410,17 @@ const Game = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       
-      if (appRef.current) {
+      if (appRef?.current) {
         try {
           // Remove the game loop if it exists
           if (gameLoopRef.current) {
             gameLoopRef.current();
           }
           // Destroy the PIXI application
-          appRef.current.destroy(true, true);
+          const app = appRef.current;
+          if (app && app.destroy) {
+            app.destroy(true, true);
+          }
           appRef.current = null;
           isInitializedRef.current = false;
         } catch (error) {
