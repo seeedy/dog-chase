@@ -38,7 +38,7 @@ export class StaminaBar {
 
   private updateFill(stamina: number) {
     this.fill.clear();
-    this.fill.beginFill(0x00FF00);
+    this.fill.beginFill(stamina === 1 ? 0x00FF00 : 0xFFFF00);
     this.fill.drawRoundedRect(
       this.padding,
       this.padding,

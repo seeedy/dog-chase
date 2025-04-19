@@ -3,26 +3,82 @@ import * as PIXI from 'pixi.js';
 interface ChuckCharacterProps {
   app: PIXI.Application;
   gameContainer: PIXI.Container;
-  runTextures: PIXI.Texture[];
-  hurtTextures: PIXI.Texture[];
 }
 
 export class ChuckCharacter {
   private sprite: PIXI.AnimatedSprite | null = null;
   private app: PIXI.Application;
   private gameContainer: PIXI.Container;
-  private runTextures: PIXI.Texture[];
-  private hurtTextures: PIXI.Texture[];
+  private runTextures: PIXI.Texture[] = [];
+  private hurtTextures: PIXI.Texture[] = [];
   private direction: 'left' | 'right' | null = null;
   private readonly BASE_SPEED = 9;
   private speedMultiplier: number = 1;
   private isHurt: boolean = false;
+  private readonly chuckFrameWidth = 48;
+  private readonly chuckFrameHeight = 48;
 
-  constructor({ app, gameContainer, runTextures, hurtTextures }: ChuckCharacterProps) {
+  constructor({ app, gameContainer }: ChuckCharacterProps) {
     this.app = app;
     this.gameContainer = gameContainer;
-    this.runTextures = runTextures;
-    this.hurtTextures = hurtTextures;
+    this.initializeTextures();
+  }
+
+  private async initializeTextures() {
+    try {
+      // Load textures
+      const [chuckTexture, chuckHurtTexture] = await Promise.all([
+        PIXI.Assets.load('assets/sprites/chuck_run.png'),
+        PIXI.Assets.load('assets/sprites/chuck_hit.png')
+      ]);
+
+      // Create Chuck spritesheet
+      const chuckSpritesheet = new PIXI.Spritesheet(chuckTexture.source, {
+        frames: {
+          run0: { frame: { x: 0, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } },
+          run1: { frame: { x: this.chuckFrameWidth, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } },
+          run2: { frame: { x: this.chuckFrameWidth * 2, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } },
+          run3: { frame: { x: this.chuckFrameWidth * 3, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } },
+          run4: { frame: { x: this.chuckFrameWidth * 4, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } },
+          run5: { frame: { x: this.chuckFrameWidth * 5, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } }
+        },
+        meta: {
+          scale: "0.9"
+        }
+      });
+
+      // Create Chuck hurt spritesheet
+      const chuckHurtSpritesheet = new PIXI.Spritesheet(chuckHurtTexture.source, {
+        frames: {
+          hurt0: { frame: { x: 0, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } },
+          hurt1: { frame: { x: this.chuckFrameWidth, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } },
+          hurt2: { frame: { x: this.chuckFrameWidth * 2, y: 0, w: this.chuckFrameWidth, h: this.chuckFrameHeight } }
+        },
+        meta: {
+          scale: "0.9"
+        }
+      });
+
+      await Promise.all([chuckSpritesheet.parse(), chuckHurtSpritesheet.parse()]);
+
+      // Create arrays of textures for animations
+      this.runTextures = [
+        chuckSpritesheet.textures.run0,
+        chuckSpritesheet.textures.run1,
+        chuckSpritesheet.textures.run2,
+        chuckSpritesheet.textures.run3,
+        chuckSpritesheet.textures.run4,
+        chuckSpritesheet.textures.run5
+      ];
+
+      this.hurtTextures = [
+        chuckHurtSpritesheet.textures.hurt0,
+        chuckHurtSpritesheet.textures.hurt1,
+        chuckHurtSpritesheet.textures.hurt2
+      ];
+    } catch (error) {
+      console.error('Error loading Chuck textures:', error);
+    }
   }
 
   public spawn(dogX: number) {

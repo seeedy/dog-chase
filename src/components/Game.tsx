@@ -87,12 +87,10 @@ const Game = () => {
           const textures = await Promise.all([
               PIXI.Assets.load('assets/sprites/dog_medium.png'),
               PIXI.Assets.load('assets/sprites/Pataepollo.png'),
-              PIXI.Assets.load('assets/sprites/grass_2.jpg'),
-              PIXI.Assets.load('assets/sprites/chuck_run.png'),
-              PIXI.Assets.load('assets/sprites/chuck_hit.png')
+              PIXI.Assets.load('assets/sprites/grass_2.jpg')
           ]);
 
-          const [dogTexture, treatTexture, grassTexture, chuckTexture, chuckHurtTexture] = textures;
+          const [dogTexture, treatTexture, grassTexture] = textures;
 
           // Create tiling background
           const background = new PIXI.TilingSprite({
@@ -114,59 +112,10 @@ const Game = () => {
           let treat: PIXI.Sprite | null = null;
           let nextTreatDelay = 5;
 
-          // Create Chuck spritesheet
-          const chuckFrameWidth = 48;
-          const chuckFrameHeight = 48;
-          const chuckSpritesheet = new PIXI.Spritesheet(chuckTexture.source, {
-              frames: {
-                  run0: { frame: { x: 0, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run1: { frame: { x: chuckFrameWidth, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run2: { frame: { x: chuckFrameWidth * 2, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run3: { frame: { x: chuckFrameWidth * 3, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run4: { frame: { x: chuckFrameWidth * 4, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run5: { frame: { x: chuckFrameWidth * 5, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } }
-              },
-              meta: {
-                  scale: "0.9"
-              }
-          });
-
-          // Create Chuck hurt spritesheet
-          const chuckHurtSpritesheet = new PIXI.Spritesheet(chuckHurtTexture.source, {
-              frames: {
-                  hurt0: { frame: { x: 0, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  hurt1: { frame: { x: chuckFrameWidth, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  hurt2: { frame: { x: chuckFrameWidth * 2, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } }
-              },
-              meta: {
-                  scale: "0.9"
-              }
-          });
-
-          await Promise.all([chuckSpritesheet.parse(), chuckHurtSpritesheet.parse()]);
-
-          // Create arrays of textures for animations
-          const chuckRunTextures = [
-              chuckSpritesheet.textures.run0,
-              chuckSpritesheet.textures.run1,
-              chuckSpritesheet.textures.run2,
-              chuckSpritesheet.textures.run3,
-              chuckSpritesheet.textures.run4,
-              chuckSpritesheet.textures.run5
-          ];
-
-          const chuckHurtTextures = [
-              chuckHurtSpritesheet.textures.hurt0,
-              chuckHurtSpritesheet.textures.hurt1,
-              chuckHurtSpritesheet.textures.hurt2
-          ];
-
           // Create Chuck character
           chuckRef.current = new ChuckCharacter({
             app,
-            gameContainer,
-            runTextures: chuckRunTextures,
-            hurtTextures: chuckHurtTextures
+            gameContainer
           });
           
           // Create dog character
@@ -218,9 +167,12 @@ const Game = () => {
               const treatWidth = treat.width;
               const treatHeight = treat.height;
               
-              // Random position within screen bounds, accounting for treat size
-              const x = Math.random() * (app.screen.width - treatWidth) + treatWidth/2;
-              const y = Math.random() * (app.screen.height - treatHeight) + treatHeight/2;
+              // Add border margin (50 pixels from each edge)
+              const borderMargin = 50;
+              
+              // Random position within screen bounds, accounting for treat size and border margin
+              const x = Math.random() * (app.screen.width - treatWidth - (borderMargin * 2)) + treatWidth/2 + borderMargin;
+              const y = Math.random() * (app.screen.height - treatHeight - (borderMargin * 2)) + treatHeight/2 + borderMargin;
               treat.x = x;
               treat.y = y;
               
