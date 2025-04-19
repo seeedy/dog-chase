@@ -17,13 +17,11 @@ const Game = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
         keys[e.key] = true;
-        console.log('Key pressed:', e.key, 'Current keys state:', keys);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
         keys[e.key] = false;
-        console.log('Key released:', e.key, 'Current keys state:', keys);
       }
     };
 
@@ -49,7 +47,6 @@ const Game = () => {
           autoDensity: true,
           resizeTo: gameRef.current || window,
         });
-        console.log('PIXI Application initialized');
         isInitializedRef.current = true;
         
         // Add the canvas to the DOM
@@ -65,7 +62,6 @@ const Game = () => {
           canvas.style.padding = '0';
           canvas.style.border = 'none';
           gameRef.current.appendChild(canvas);
-          console.log('Canvas added to DOM');
 
           // Add CSS to body to prevent scrolling
           document.body.style.margin = '0';
@@ -81,11 +77,12 @@ const Game = () => {
           const textures = await Promise.all([
               PIXI.Assets.load('assets/sprites/dog_medium.png'),
               PIXI.Assets.load('assets/sprites/Pataepollo.png'),
-              PIXI.Assets.load('assets/sprites/grass_1.jpg')
+              PIXI.Assets.load('assets/sprites/grass_2.jpg'),
+              PIXI.Assets.load('assets/sprites/chuck_run.png'),
+              PIXI.Assets.load('assets/sprites/chuck_hit.png')
           ]);
 
-          const [dogTexture, treatTexture, grassTexture] = textures;
-          console.log('All textures loaded');
+          const [dogTexture, treatTexture, grassTexture, chuckTexture, chuckHurtTexture] = textures;
 
           // Create tiling background
           const background = new PIXI.TilingSprite({
@@ -118,7 +115,12 @@ const Game = () => {
           let treat: PIXI.Sprite | null = null;
           let score = 0;
           let nextTreatDelay = 5; // Initial delay of 5 seconds
-
+          let chuckTimer = 0;
+          let chuck: PIXI.AnimatedSprite | null = null;
+          let chuckDirection: 'left' | 'right' | null = null;
+          const CHUCK_SPEED = 9;
+          const CHUCK_SPAWN_INTERVAL = 10;
+          
           // Function to get random delay between treats
           const getNextTreatDelay = () => {
               return Math.random() * 7 + 5; // Random number between 5 and 12
@@ -134,7 +136,6 @@ const Game = () => {
           const checkCollision = () => {
               if (!treat || !dog) return false;
 
-              // Simple circle collision detection
               const dogBounds = dog.getBounds();
               const treatBounds = treat.getBounds();
 
@@ -155,9 +156,7 @@ const Game = () => {
 
           // Function to create a new treat
           const createTreat = () => {
-              console.log('Creating new treat...');
               if (treat) {
-                  console.log('Removing existing treat');
                   gameContainer.removeChild(treat);
               }
 
@@ -175,20 +174,150 @@ const Game = () => {
               treat.x = x;
               treat.y = y;
               
-              console.log('Adding treat to container at position:', { 
-                  x, 
-                  y,
-                  width: treatWidth,
-                  height: treatHeight,
-                  screenWidth: app.screen.width,
-                  screenHeight: app.screen.height
-              });
               gameContainer.addChild(treat);
               treatVisible = true;
               
               // Force a render update
               app.stage.updateTransform(app.stage);
               app.render();
+          };
+
+          // Create Chuck spritesheet
+          const chuckFrameWidth = 48;
+          const chuckFrameHeight = 48;
+          const chuckSpritesheet = new PIXI.Spritesheet(chuckTexture.source, {
+              frames: {
+                  run0: { frame: { x: 0, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run1: { frame: { x: chuckFrameWidth, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run2: { frame: { x: chuckFrameWidth * 2, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run3: { frame: { x: chuckFrameWidth * 3, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run4: { frame: { x: chuckFrameWidth * 4, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run5: { frame: { x: chuckFrameWidth * 5, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } }
+              },
+              meta: {
+                  scale: "0.9"
+              }
+          });
+
+          // Create Chuck hurt spritesheet
+          const chuckHurtSpritesheet = new PIXI.Spritesheet(chuckHurtTexture.source, {
+              frames: {
+                  hurt0: { frame: { x: 0, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  hurt1: { frame: { x: chuckFrameWidth, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  hurt2: { frame: { x: chuckFrameWidth * 2, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } }
+              },
+              meta: {
+                  scale: "0.9"
+              }
+          });
+
+          await Promise.all([chuckSpritesheet.parse(), chuckHurtSpritesheet.parse()]);
+
+          // Create arrays of textures for animations
+          const chuckRunTextures = [
+              chuckSpritesheet.textures.run0,
+              chuckSpritesheet.textures.run1,
+              chuckSpritesheet.textures.run2,
+              chuckSpritesheet.textures.run3,
+              chuckSpritesheet.textures.run4,
+              chuckSpritesheet.textures.run5
+          ];
+
+          const chuckHurtTextures = [
+              chuckHurtSpritesheet.textures.hurt0,
+              chuckHurtSpritesheet.textures.hurt1,
+              chuckHurtSpritesheet.textures.hurt2
+          ];
+
+          // Create game over text
+          const gameOverText = new PIXI.Text({
+              text: 'Game Over',
+              style: {
+                  fontFamily: 'Arial',
+                  fontSize: 48,
+                  fill: 0xFF0000,
+                  align: 'center'
+              }
+          });
+          gameOverText.anchor.set(0.5);
+          gameOverText.x = app.screen.width / 2;
+          gameOverText.y = 50;
+          gameOverText.visible = false;
+          app.stage.addChild(gameOverText);
+
+          let isGameOver = false;
+
+          // Function to handle game over
+          const handleGameOver = () => {
+              isGameOver = true;
+              gameOverText.visible = true;
+              score = 0;
+              scoreText.text = 'Score: 0';
+              
+              // Remove dog
+              if (dog) {
+                  gameContainer.removeChild(dog);
+                  dog = null;
+              }
+
+              // Show hurt animation for Chuck
+              if (chuck) {
+                  const hurtChuck = new PIXI.AnimatedSprite(chuckHurtTextures);
+                  hurtChuck.animationSpeed = 0.2;
+                  hurtChuck.loop = false;
+                  hurtChuck.anchor.set(0.5);
+                  hurtChuck.scale.set(chuck.scale.x, chuck.scale.y);
+                  hurtChuck.x = chuck.x;
+                  hurtChuck.y = chuck.y;
+                  gameContainer.addChild(hurtChuck);
+                  
+                  // Remove original Chuck
+                  gameContainer.removeChild(chuck);
+                  chuck = null;
+                  
+                  // Remove hurt animation after it plays
+                  hurtChuck.onComplete = () => {
+                      gameContainer.removeChild(hurtChuck);
+                  };
+                  hurtChuck.play();
+              }
+          };
+
+          // Function to check collision between dog and Chuck
+          const checkChuckCollision = () => {
+              if (!chuck || !dog) return false;
+
+              const dogBounds = dog.getBounds();
+              const chuckBounds = chuck.getBounds();
+
+              return dogBounds.x < chuckBounds.x + chuckBounds.width &&
+                     dogBounds.x + dogBounds.width > chuckBounds.x &&
+                     dogBounds.y < chuckBounds.y + chuckBounds.height &&
+                     dogBounds.y + dogBounds.height > chuckBounds.y;
+          };
+
+          // Function to spawn chuck
+          const spawnChuck = () => {
+              if (chuck) {
+                  gameContainer.removeChild(chuck);
+              }
+
+              chuck = new PIXI.AnimatedSprite(chuckRunTextures);
+              chuck.animationSpeed = 0.3;
+              chuck.play();
+              chuck.anchor.set(0.5);
+              chuck.scale.set(2);
+
+              // Determine spawn position and direction based on player position
+              const spawnFromRight = currentX < app.screen.width / 2;
+              chuck.x = spawnFromRight ? app.screen.width + 20 : -20;
+              chuck.y = Math.random() * (app.screen.height - 100) + 50; // Random Y position
+              chuckDirection = spawnFromRight ? 'left' : 'right';
+              
+              // Flip sprite based on direction - reversed the logic
+              chuck.scale.x = spawnFromRight ? -2 : 2;
+              
+              gameContainer.addChild(chuck);
           };
 
           // Create dog sprite sheet
@@ -213,7 +342,6 @@ const Game = () => {
           });
 
           await spritesheet.parse();
-          console.log('Spritesheet parsed');
 
           // Create arrays of textures for animations
           const runTextures = [
@@ -232,7 +360,7 @@ const Game = () => {
           ];
 
           // Create animated sprite
-          let dog = new PIXI.AnimatedSprite(runTextures);
+          let dog: PIXI.AnimatedSprite | null = new PIXI.AnimatedSprite(runTextures);
           dog.animationSpeed = 0.25;
           dog.play();
           dog.anchor.set(0.5);
@@ -250,18 +378,51 @@ const Game = () => {
           const gameLoop = () => {
               frameCount++;
 
+              if (isGameOver) {
+                  animationFrameId = requestAnimationFrame(gameLoop);
+                  return;
+              }
+
               // Handle treat spawning and collision
-              treatTimer += 1/60; // Assuming 60 FPS
+              treatTimer += 1/60;
               if (treatTimer >= nextTreatDelay && !treatVisible) {
-                  console.log('Time to spawn treat! Timer:', treatTimer);
                   createTreat();
                   treatTimer = 0;
-                  nextTreatDelay = getNextTreatDelay(); // Set next random delay
-                  console.log('Next treat will appear in:', nextTreatDelay, 'seconds');
-              } else if (treatVisible) {
-                  // Check for collision
+                  nextTreatDelay = getNextTreatDelay();
+              }
+
+              // Handle chuck spawning and movement
+              chuckTimer += 1/60;
+              if (chuckTimer >= CHUCK_SPAWN_INTERVAL) {
+                  spawnChuck();
+                  chuckTimer = 0;
+              }
+
+              // Move chuck if it exists
+              if (chuck && chuckDirection) {
+                  chuck.x += chuckDirection === 'left' ? -CHUCK_SPEED : CHUCK_SPEED;
+                  
+                  // Check for collision with dog
+                  if (checkChuckCollision()) {
+                      handleGameOver();
+                      return;
+                  }
+                  
+                  // Remove chuck if it's off screen
+                  if (chuck.x < -50 || chuck.x > app.screen.width + 50) {
+                      gameContainer.removeChild(chuck);
+                      chuck = null;
+                      chuckDirection = null;
+                  }
+
+                  // Force a render update for the chuck
+                  app.stage.updateTransform(app.stage);
+                  app.render();
+              }
+
+              // Handle treat collision and removal
+              if (treatVisible) {
                   if (checkCollision()) {
-                      console.log('Treat collected!');
                       if (treat) {
                           gameContainer.removeChild(treat);
                           treat = null;
@@ -270,7 +431,6 @@ const Game = () => {
                       treatTimer = 0;
                       updateScore(1);
                   } else if (treatTimer >= 3) {
-                      console.log('Time to remove treat! Timer:', treatTimer);
                       if (treat) {
                           gameContainer.removeChild(treat);
                           treat = null;
@@ -278,15 +438,6 @@ const Game = () => {
                       treatVisible = false;
                       treatTimer = 0;
                   }
-              }
-
-              // Log treat state periodically
-              if (frameCount % 60 === 0) { // Log every second
-                  console.log('Treat state:', {
-                      visible: treatVisible,
-                      timer: treatTimer,
-                      exists: !!treat
-                  });
               }
 
               const speed = 5;
@@ -299,7 +450,6 @@ const Game = () => {
                 isMoving = true;
                 lastDirection = 1; // Store direction for idle
                 dog.scale.set(2, 2);
-                console.log('Moving left, new position:', { x: currentX, y: currentY });
               }
               if (keys['ArrowRight']) {
                 currentX += speed;
@@ -307,19 +457,16 @@ const Game = () => {
                 isMoving = true;
                 lastDirection = -1; // Store direction for idle
                 dog.scale.set(-2, 2);
-                console.log('Moving right, new position:', { x: currentX, y: currentY });
               }
               if (keys['ArrowUp']) {
                 currentY -= speed;
                 moved = true;
                 isMoving = true;
-                console.log('Moving up, new position:', { x: currentX, y: currentY });
               }
               if (keys['ArrowDown']) {
                 currentY += speed;
                 moved = true;
                 isMoving = true;
-                console.log('Moving down, new position:', { x: currentX, y: currentY });
               }
 
               if (moved) {
