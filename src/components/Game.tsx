@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { DogCharacter } from './DogCharacter';
 import { GameUI } from './GameUI';
+import { ChuckCharacter } from './ChuckCharacter';
 
 const Game = () => {
   const gameRef = useRef<HTMLDivElement>(null);
@@ -11,6 +12,10 @@ const Game = () => {
   const dogRef = useRef<DogCharacter | null>(null);
   const gameUIRef = useRef<GameUI | null>(null);
   const lastTimeRef = useRef<number>(0);
+  const chuckRef = useRef<ChuckCharacter | null>(null);
+  const chuckTimerRef = useRef<number>(0);
+  const chuckSpawnIntervalRef = useRef<number>(10);
+  const isFirstSpawnRef = useRef<boolean>(true);
 
   useEffect(() => {
     if (!gameRef.current) return;
@@ -95,8 +100,8 @@ const Game = () => {
               width: app.screen.width,
               height: app.screen.height
           });
-          background.tileScale.set(0.5); // Adjust scale as needed
-          gameContainer.addChildAt(background, 0); // Add at bottom of container
+          background.tileScale.set(0.5);
+          gameContainer.addChildAt(background, 0);
 
           // Create game UI
           gameUIRef.current = new GameUI({ app });
@@ -107,12 +112,62 @@ const Game = () => {
           let treatTimer = 0;
           let treatVisible = false;
           let treat: PIXI.Sprite | null = null;
-          let nextTreatDelay = 5; // Initial delay of 5 seconds
-          let chuckTimer = 0;
-          let chuck: PIXI.AnimatedSprite | null = null;
-          let chuckDirection: 'left' | 'right' | null = null;
-          const CHUCK_SPEED = 9;
-          const CHUCK_SPAWN_INTERVAL = 10;
+          let nextTreatDelay = 5;
+
+          // Create Chuck spritesheet
+          const chuckFrameWidth = 48;
+          const chuckFrameHeight = 48;
+          const chuckSpritesheet = new PIXI.Spritesheet(chuckTexture.source, {
+              frames: {
+                  run0: { frame: { x: 0, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run1: { frame: { x: chuckFrameWidth, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run2: { frame: { x: chuckFrameWidth * 2, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run3: { frame: { x: chuckFrameWidth * 3, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run4: { frame: { x: chuckFrameWidth * 4, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  run5: { frame: { x: chuckFrameWidth * 5, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } }
+              },
+              meta: {
+                  scale: "0.9"
+              }
+          });
+
+          // Create Chuck hurt spritesheet
+          const chuckHurtSpritesheet = new PIXI.Spritesheet(chuckHurtTexture.source, {
+              frames: {
+                  hurt0: { frame: { x: 0, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  hurt1: { frame: { x: chuckFrameWidth, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
+                  hurt2: { frame: { x: chuckFrameWidth * 2, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } }
+              },
+              meta: {
+                  scale: "0.9"
+              }
+          });
+
+          await Promise.all([chuckSpritesheet.parse(), chuckHurtSpritesheet.parse()]);
+
+          // Create arrays of textures for animations
+          const chuckRunTextures = [
+              chuckSpritesheet.textures.run0,
+              chuckSpritesheet.textures.run1,
+              chuckSpritesheet.textures.run2,
+              chuckSpritesheet.textures.run3,
+              chuckSpritesheet.textures.run4,
+              chuckSpritesheet.textures.run5
+          ];
+
+          const chuckHurtTextures = [
+              chuckHurtSpritesheet.textures.hurt0,
+              chuckHurtSpritesheet.textures.hurt1,
+              chuckHurtSpritesheet.textures.hurt2
+          ];
+
+          // Create Chuck character
+          chuckRef.current = new ChuckCharacter({
+            app,
+            gameContainer,
+            runTextures: chuckRunTextures,
+            hurtTextures: chuckHurtTextures
+          });
           
           // Create dog character
           dogRef.current = new DogCharacter({
@@ -177,53 +232,6 @@ const Game = () => {
               app.render();
           };
 
-          // Create Chuck spritesheet
-          const chuckFrameWidth = 48;
-          const chuckFrameHeight = 48;
-          const chuckSpritesheet = new PIXI.Spritesheet(chuckTexture.source, {
-              frames: {
-                  run0: { frame: { x: 0, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run1: { frame: { x: chuckFrameWidth, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run2: { frame: { x: chuckFrameWidth * 2, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run3: { frame: { x: chuckFrameWidth * 3, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run4: { frame: { x: chuckFrameWidth * 4, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  run5: { frame: { x: chuckFrameWidth * 5, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } }
-              },
-              meta: {
-                  scale: "0.9"
-              }
-          });
-
-          // Create Chuck hurt spritesheet
-          const chuckHurtSpritesheet = new PIXI.Spritesheet(chuckHurtTexture.source, {
-              frames: {
-                  hurt0: { frame: { x: 0, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  hurt1: { frame: { x: chuckFrameWidth, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } },
-                  hurt2: { frame: { x: chuckFrameWidth * 2, y: 0, w: chuckFrameWidth, h: chuckFrameHeight } }
-              },
-              meta: {
-                  scale: "0.9"
-              }
-          });
-
-          await Promise.all([chuckSpritesheet.parse(), chuckHurtSpritesheet.parse()]);
-
-          // Create arrays of textures for animations
-          const chuckRunTextures = [
-              chuckSpritesheet.textures.run0,
-              chuckSpritesheet.textures.run1,
-              chuckSpritesheet.textures.run2,
-              chuckSpritesheet.textures.run3,
-              chuckSpritesheet.textures.run4,
-              chuckSpritesheet.textures.run5
-          ];
-
-          const chuckHurtTextures = [
-              chuckHurtSpritesheet.textures.hurt0,
-              chuckHurtSpritesheet.textures.hurt1,
-              chuckHurtSpritesheet.textures.hurt2
-          ];
-
           let isGameOver = false;
 
           // Function to handle game over
@@ -241,64 +249,24 @@ const Game = () => {
               }
 
               // Show hurt animation for Chuck
-              if (chuck) {
-                  const hurtChuck = new PIXI.AnimatedSprite(chuckHurtTextures);
-                  hurtChuck.animationSpeed = 0.2;
-                  hurtChuck.loop = false;
-                  hurtChuck.anchor.set(0.5);
-                  hurtChuck.scale.set(chuck.scale.x, chuck.scale.y);
-                  hurtChuck.x = chuck.x;
-                  hurtChuck.y = chuck.y;
-                  gameContainer.addChild(hurtChuck);
-                  
-                  // Remove original Chuck
-                  gameContainer.removeChild(chuck);
-                  chuck = null;
-                  
-                  // Remove hurt animation after it plays
-                  hurtChuck.onComplete = () => {
-                      gameContainer.removeChild(hurtChuck);
-                  };
-                  hurtChuck.play();
+              if (chuckRef.current) {
+                chuckRef.current.playHurtAnimation();
               }
           };
 
           // Function to check collision between dog and Chuck
           const checkChuckCollision = () => {
-              if (!chuck || !dogRef.current) return false;
+              if (!chuckRef.current || !dogRef.current) return false;
 
               const dogBounds = dogRef.current.getBounds();
               if (!dogBounds) return false;
-              const chuckBounds = chuck.getBounds();
+              const chuckBounds = chuckRef.current.getBounds();
+              if (!chuckBounds) return false;
 
               return dogBounds.x < chuckBounds.x + chuckBounds.width &&
                      dogBounds.x + dogBounds.width > chuckBounds.x &&
                      dogBounds.y < chuckBounds.y + chuckBounds.height &&
                      dogBounds.y + dogBounds.height > chuckBounds.y;
-          };
-
-          // Function to spawn chuck
-          const spawnChuck = () => {
-              if (chuck) {
-                  gameContainer.removeChild(chuck);
-              }
-
-              chuck = new PIXI.AnimatedSprite(chuckRunTextures);
-              chuck.animationSpeed = 0.3;
-              chuck.play();
-              chuck.anchor.set(0.5);
-              chuck.scale.set(2);
-
-              // Determine spawn position and direction based on player position
-              const spawnFromRight = dogRef.current?.getBounds()?.x || 0 < app.screen.width / 2;
-              chuck.x = spawnFromRight ? app.screen.width + 20 : -20;
-              chuck.y = Math.random() * (app.screen.height - 100) + 50; // Random Y position
-              chuckDirection = spawnFromRight ? 'left' : 'right';
-              
-              // Flip sprite based on direction - reversed the logic
-              chuck.scale.x = spawnFromRight ? -2 : 2;
-              
-              gameContainer.addChild(chuck);
           };
 
           // Game loop
@@ -332,32 +300,33 @@ const Game = () => {
               }
 
               // Handle chuck spawning and movement
-              chuckTimer += deltaTime;
-              if (chuckTimer >= CHUCK_SPAWN_INTERVAL) {
-                  spawnChuck();
-                  chuckTimer = 0;
+              chuckTimerRef.current += deltaTime;
+              if (chuckTimerRef.current >= chuckSpawnIntervalRef.current) {
+                  if (dogRef.current) {
+                    const dogBounds = dogRef.current.getBounds();
+                    if (dogBounds) {
+                      chuckRef.current?.spawn(dogBounds.x);
+                    }
+                  }
+                  chuckTimerRef.current = 0;
+                  
+                  // After first spawn, randomize the interval between 5 and 10 seconds
+                  if (isFirstSpawnRef.current) {
+                    isFirstSpawnRef.current = false;
+                  } else {
+                    chuckSpawnIntervalRef.current = Math.random() * 5 + 5; // Random number between 5 and 10
+                  }
               }
 
-              // Move chuck if it exists
-              if (chuck && chuckDirection) {
-                  chuck.x += chuckDirection === 'left' ? -CHUCK_SPEED : CHUCK_SPEED;
-                  
-                  // Check for collision with dog
-                  if (checkChuckCollision()) {
-                      handleGameOver();
-                      return;
-                  }
-                  
-                  // Remove chuck if it's off screen
-                  if (chuck.x < -50 || chuck.x > app.screen.width + 50) {
-                      gameContainer.removeChild(chuck);
-                      chuck = null;
-                      chuckDirection = null;
-                  }
-
-                  // Force a render update for the chuck
-                  app.stage.updateTransform(app.stage);
-                  app.render();
+              // Update chuck if it exists
+              if (chuckRef.current) {
+                chuckRef.current.update(deltaTime);
+                
+                // Check for collision with dog
+                if (checkChuckCollision()) {
+                    handleGameOver();
+                    return;
+                }
               }
 
               // Handle treat collision and removal
