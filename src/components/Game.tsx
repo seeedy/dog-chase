@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import { DogCharacter } from './DogCharacter';
 import { GameUI } from './GameUI';
 import { ChuckCharacter } from './ChuckCharacter';
+import { ParallaxBackground } from './ParallaxBackground';
 
 const Game = () => {
   const gameRef = useRef<HTMLDivElement>(null);
@@ -16,6 +17,7 @@ const Game = () => {
   const chuckTimerRef = useRef<number>(0);
   const chuckSpawnIntervalRef = useRef<number>(10);
   const isFirstSpawnRef = useRef<boolean>(true);
+  const parallaxRef = useRef<ParallaxBackground | null>(null);
 
   useEffect(() => {
     if (!gameRef.current) return;
@@ -82,6 +84,12 @@ const Game = () => {
           // Create a container for all game objects
           const gameContainer = new PIXI.Container();
           app.stage.addChild(gameContainer);
+
+          // Create parallax background
+          parallaxRef.current = new ParallaxBackground({
+            app,
+            gameContainer
+          });
 
           // Load textures
           const textures = await Promise.all([
@@ -234,6 +242,14 @@ const Game = () => {
               const deltaTime = (currentTime - lastTimeRef.current) / 1000;
               lastTimeRef.current = currentTime;
 
+              // Update parallax background
+              if (parallaxRef.current && dogRef.current) {
+                const dogBounds = dogRef.current.getBounds();
+                if (dogBounds) {
+                  parallaxRef.current.update(deltaTime, dogBounds.x);
+                }
+              }
+
               // Update dog character
               if (dogRef.current) {
                   dogRef.current.update(keys, deltaTime);
@@ -344,6 +360,10 @@ const Game = () => {
           }
           appRef.current = null;
           isInitializedRef.current = false;
+          if (parallaxRef.current) {
+            parallaxRef.current.destroy();
+            parallaxRef.current = null;
+          }
         } catch (error) {
           console.error('Error during cleanup:', error);
         }

@@ -24,7 +24,7 @@ export class DogCharacter {
   private staminaRecoveryTimer: number = 0;
   private readonly DASH_DURATION = 1.0; // 1000ms
   private readonly DASH_SPEED_MULTIPLIER = 2;
-  private readonly STAMINA_RECOVERY_TIME = 6;
+  private readonly STAMINA_RECOVERY_TIME = 4;
   private readonly STAMINA_COOLDOWN = 1.5; // 1500ms cooldown before regeneration starts
   private readonly NORMAL_SPEED: number = 5;
   private readonly DASH_SPEED: number = this.NORMAL_SPEED * this.DASH_SPEED_MULTIPLIER;
